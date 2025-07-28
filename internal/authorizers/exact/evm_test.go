@@ -20,6 +20,7 @@ import (
 )
 
 const usdcMainnet = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+const usdcSepola = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
 
 func newSimBackend() (*backends.SimulatedBackend, common.Address) {
 	key, _ := crypto.GenerateKey()
@@ -99,7 +100,7 @@ func TestAuthorize_ExactEVM_Infura(t *testing.T) {
 		t.Fatalf("error loading config file: %v", err)
 	}
 
-	au, err := NewEIP3009Authorizer(rpcUrl, usdcMainnet)
+	au, err := NewEIP3009Authorizer(rpcUrl, usdcSepola)
 	if err != nil {
 		t.Fatalf("error creating ACTUAl authorizer: %v", err)
 	}
@@ -179,10 +180,10 @@ func TestPrintHash(t *testing.T) {
 	}
 
 	dom := EIP3009Domain{
-		Name:    "USD Coin",
+		Name:    "USDC",
 		Version: "2",
-		ChainID: big.NewInt(1), // this should be 1337 when doing actual settle
-		Token:   common.HexToAddress(usdcMainnet),
+		ChainID: big.NewInt(11155111), // this should be 1337 when doing actual settle
+		Token:   common.HexToAddress(usdcSepola),
 	}
 
 	sig, err := SignEIP3009Authorization(key, dom, auth)
@@ -210,7 +211,7 @@ func TestPrintHash(t *testing.T) {
 		Network:           "ethereum",
 		PayTo:             auth.To,
 		MaxAmountRequired: auth.Value,
-		Asset:             usdcMainnet,
+		Asset:             usdcSepola,
 		Resource:          "test://unit",
 		Description:       "unit test transferWithAuthorization",
 		MimeType:          "application/json",
@@ -221,8 +222,9 @@ func TestPrintHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error loading config file: %v", err)
 	}
+	t.Log(rpcUrl)
 
-	au, err := NewEIP3009Authorizer(rpcUrl, usdcMainnet)
+	au, err := NewEIP3009Authorizer(rpcUrl, usdcSepola)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

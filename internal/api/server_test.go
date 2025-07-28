@@ -2,15 +2,26 @@ package api
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"x402/internal/config"
+	"x402/internal/cryptohelpers"
 	"x402/pkg/x402"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 )
+
+const usdcSepola = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
 
 func newTestServer() (*Server, error) {
 	srvCfg, err := config.Load("./config.env")
@@ -68,21 +79,60 @@ func TestAgainstLargeReqBody(t *testing.T) {
 }
 
 func TestVerifyEndPoint(t *testing.T) {
-	pay := x402.PaymentPayload{
+	tempKey, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sellerKey, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	from := crypto.PubkeyToAddress(tempKey.PublicKey)
+	to := crypto.PubkeyToAddress(sellerKey.PublicKey)
+
+	val := big.NewInt(0)
+
+	auth := &x402.ExactEvmPayloadAuthorization{
+		From:        from.Hex(),
+		To:          to.Hex(),
+		Value:       val.String(),
+		ValidAfter:  "0",
+		ValidBefore: "4102444800",
+		Nonce:       "0x" + strings.Repeat("ab", 32),
+	}
+
+	srv, err := newTestServer()
+	if err != nil {
+		t.Fatalf("error creating server: %v", err)
+	}
+
+	dom := cryptohelpers.EIP3009Domain{
+		Name:    "USDC",
+		Version: "2",
+		ChainID: big.NewInt(11155111), // this should be 1337 when doing actual settle
+		Token:   common.HexToAddress(srv.cfg.USDCAddress),
+	}
+
+	sig, err := SignEIP3009Authorization(tempKey, dom, auth)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pay := &x402.PaymentPayload{
 		X402Version: 1,
 		Scheme:      "exact",
 		Network:     "ethereum",
 		Payload: &x402.ExactEvmPayload{
-			Signature: "0x1",
-			Authorization: &x402.ExactEvmPayloadAuthorization{
-				From:        "0x1111111111111111111111111111111111111111",
-				To:          "0x1111111111111111111111111111111111111111",
-				Value:       "100000",
-				ValidAfter:  "0",
-				ValidBefore: "4102444800",
-				Nonce:       "deadbeefcafebabe000000000000000000000000000000000000000000000000",
-			},
+			Signature:     sig,
+			Authorization: auth,
 		},
+	}
+
+	ok, _, err := VerifyEIP3009Sig(dom, *pay.Payload)
+	if !ok {
+		t.Fatal(err)
 	}
 
 	payloadJSON, err := json.Marshal(pay)
@@ -90,25 +140,27 @@ func TestVerifyEndPoint(t *testing.T) {
 		t.Fatalf("FATAL ERROR: could not marshall struct to json: %v", err)
 	}
 
+	paymentReq := x402.PaymentRequirements{
+		Scheme:            "exact",
+		Network:           "ethereum",
+		PayTo:             auth.To,
+		MaxAmountRequired: auth.Value,
+		Asset:             srv.cfg.USDCAddress,
+		Resource:          "test://unit",
+		Description:       "unit test transferWithAuthorization",
+		MimeType:          "application/json",
+		MaxTimeoutSeconds: 600,
+	}
+
 	req := x402.VerifyRequest{
-		X402Version:   1,
-		PaymentHeader: base64.StdEncoding.EncodeToString(payloadJSON),
-		PaymentRequirements: x402.PaymentRequirements{
-			Scheme:            "exact",
-			Network:           "ethereum",
-			PayTo:             "0x1111111111111111111111111111111111111111",
-			MaxAmountRequired: "100000",
-		},
+		X402Version:         1,
+		PaymentHeader:       base64.StdEncoding.EncodeToString(payloadJSON),
+		PaymentRequirements: paymentReq,
 	}
 
 	vreq, err := json.Marshal(req)
 	if err != nil {
 		t.Fatalf("error marshalling Verify Request struct into JSON, err: %v", err)
-	}
-
-	srv, err := newTestServer()
-	if err != nil {
-		t.Fatalf("error creating server: %v", err)
 	}
 
 	rr := httptest.NewRecorder()
@@ -149,18 +201,128 @@ func TestMaliciousReqHeaders(t *testing.T) {
 	}
 }
 
-func TestConfig(t *testing.T) {
-	testConfig, err := config.Load("../config/config.env")
-	if err != nil {
-		t.Fatalf("error loading config: %v", err)
+// Need to move this code at some point
+
+func SignEIP3009Authorization(priv *ecdsa.PrivateKey, dom cryptohelpers.EIP3009Domain, auth *x402.ExactEvmPayloadAuthorization) (string, error) {
+	domainSep := cryptohelpers.HashDomain(dom)
+
+	if _, ok := new(big.Int).SetString(auth.Value, 10); !ok {
+		return "", fmt.Errorf("bad value")
 	}
 
-	t.Log(testConfig)
-
-	url, err := config.GrabRPCUrl("../config/config.env")
-	if err != nil {
-		t.Fatalf("error grabbing url: %v", err)
+	if _, ok := new(big.Int).SetString(auth.ValidAfter, 10); !ok {
+		return "", fmt.Errorf("bad validAfter")
 	}
 
-	t.Logf("URL: %s", url)
+	if _, ok := new(big.Int).SetString(auth.ValidBefore, 10); !ok {
+		return "", fmt.Errorf("bad validBefore")
+	}
+
+	structHash, err := cryptohelpers.HashTransferWithAuth(auth)
+	if err != nil {
+		return "", err
+	}
+	digest := cryptohelpers.Eip191Digest(domainSep, structHash)
+
+	sig, err := crypto.Sign(digest.Bytes(), priv)
+	if err != nil {
+		return "", err
+	}
+
+	sig[64] += 27
+
+	return hexutil.Encode(sig), nil
+}
+
+// VerifyEIP3009Sig verifies an EIP-3009 TransferWithAuthorization signature off-chain.
+// It returns (ok, recoveredSigner, error).
+func VerifyEIP3009Sig(
+	d cryptohelpers.EIP3009Domain,
+	evm x402.ExactEvmPayload,
+) (bool, common.Address, error) {
+
+	if evm.Authorization == nil {
+		return false, common.Address{}, errors.New("missing authorization")
+	}
+	auth := evm.Authorization
+
+	// 1) decode hex -> 65 bytes
+	sigBytes, err := hexutil.Decode(evm.Signature)
+	if err != nil {
+		return false, common.Address{}, fmt.Errorf("bad signature hex: %w", err)
+	}
+	if len(sigBytes) != 65 {
+		return false, common.Address{}, fmt.Errorf("bad signature length %d", len(sigBytes))
+	}
+
+	// 2) split r,s,v
+	r := new(big.Int).SetBytes(sigBytes[0:32])
+	s := new(big.Int).SetBytes(sigBytes[32:64])
+	vRaw := sigBytes[64]
+
+	// 3) normalize v to {27,28}
+	var v27 byte
+	switch vRaw {
+	case 27, 28:
+		v27 = vRaw
+	case 0, 1:
+		v27 = vRaw + 27
+	default:
+		return false, common.Address{}, fmt.Errorf("invalid v %d", vRaw)
+	}
+
+	if err := validateSigValues(v27, r, s); err != nil {
+		return false, common.Address{}, fmt.Errorf(
+			"invalid signature values: vRaw=%d normalized=%d r=%s s=%s (%v)",
+			vRaw, v27, r.Text(16), s.Text(16), err,
+		)
+	}
+
+	// 5) make a COPY and downshift v to 0/1 for SigToPub
+	sigForRecover := make([]byte, 65)
+	copy(sigForRecover, sigBytes)
+	sigForRecover[64] = v27 - 27 // now 0/1
+
+	// 6) domain + struct hash
+	domainSep := cryptohelpers.HashDomain(d)
+	structHash, err := cryptohelpers.HashTransferWithAuth(auth)
+	if err != nil {
+		return false, common.Address{}, err
+	}
+	digest := cryptohelpers.Eip191Digest(domainSep, structHash)
+
+	// 7) recover
+	pub, err := crypto.SigToPub(digest.Bytes(), sigForRecover)
+	if err != nil {
+		return false, common.Address{}, fmt.Errorf("ecrecover failed: %w", err)
+	}
+	recovered := crypto.PubkeyToAddress(*pub)
+
+	// 8) compare to "from"
+	from := common.HexToAddress(auth.From)
+	if !bytes.Equal(recovered.Bytes(), from.Bytes()) {
+		return false, recovered, errors.New("recovered signer != from")
+	}
+	return true, recovered, nil
+}
+
+func validateSigValues(v byte, r, s *big.Int) error {
+	if v != 27 && v != 28 {
+		return fmt.Errorf("bad v %d", v)
+	}
+	if r.Sign() <= 0 || s.Sign() <= 0 {
+		return fmt.Errorf("r or s is zero/negative")
+	}
+	n := crypto.S256().Params().N
+	if r.Cmp(n) >= 0 {
+		return fmt.Errorf("r >= curve order")
+	}
+	if s.Cmp(n) >= 0 {
+		return fmt.Errorf("s >= curve order")
+	}
+	halfN := new(big.Int).Rsh(new(big.Int).Set(n), 1)
+	if s.Cmp(halfN) > 0 {
+		return fmt.Errorf("s is not low-S")
+	}
+	return nil
 }

@@ -64,10 +64,10 @@ func NewEIP3009AuthorizerCore(rpc ethereum.ContractCaller, usdc common.Address) 
 		return nil, err
 	}
 
-	chainID := big.NewInt(1)
+	chainID := big.NewInt(11155111)
 
 	dom := EIP3009Domain{
-		Name:    "USD Coin",
+		Name:    "USDC",
 		Version: "2",
 		ChainID: chainID,
 		Token:   usdc,
