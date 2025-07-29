@@ -184,6 +184,118 @@ func TestVerifyEndPoint(t *testing.T) {
 
 }
 
+func TestSettle_ExactEVM_Sepola(t *testing.T) {
+	buyerKey, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	from := crypto.PubkeyToAddress(buyerKey.PublicKey)
+
+	sellerKey, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	to := crypto.PubkeyToAddress(sellerKey.PublicKey)
+
+	srv, err := newTestServer()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	auth := &x402.ExactEvmPayloadAuthorization{
+		From:        from.Hex(),
+		To:          to.Hex(),
+		Value:       "0",
+		ValidAfter:  "0",
+		ValidBefore: "4102444800",
+		Nonce:       "0x" + strings.Repeat("ab", 32),
+	}
+
+	// EIP‑712 domain for **Sepolia USDC**
+	dom := cryptohelpers.EIP3009Domain{
+		Name:    "USDC",
+		Version: "2",
+		ChainID: big.NewInt(11155111),
+		Token:   common.HexToAddress(srv.cfg.USDCAddress),
+	}
+
+	sig, err := SignEIP3009Authorization(buyerKey, dom, auth)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pay := &x402.PaymentPayload{
+		X402Version: 1,
+		Scheme:      "exact",
+		Network:     "ethereum",
+		Payload: &x402.ExactEvmPayload{
+			Signature:     sig,
+			Authorization: auth,
+		},
+	}
+
+	// Optional local sanity check
+	if ok, _, err := VerifyEIP3009Sig(dom, *pay.Payload); !ok {
+		t.Fatalf("local verify failed: %v", err)
+	}
+
+	// Build PaymentRequirements (must match payload)
+	reqs := x402.PaymentRequirements{
+		Scheme:            "exact",
+		Network:           "ethereum",
+		PayTo:             auth.To,
+		MaxAmountRequired: auth.Value,          // "0"
+		Asset:             srv.cfg.USDCAddress, // Sepolia USDC addr
+		Resource:          "test://settle",
+		Description:       "e2e settle test",
+		MimeType:          "application/json",
+		MaxTimeoutSeconds: 600,
+	}
+
+	// 1) /verify (eth_call) should pass
+	hdrBytes, _ := json.Marshal(pay)
+	verifyBody, _ := json.Marshal(x402.VerifyRequest{
+		X402Version:         1,
+		PaymentHeader:       base64.StdEncoding.EncodeToString(hdrBytes),
+		PaymentRequirements: reqs,
+	})
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewReader(verifyBody))
+	r.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(rr, r)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/verify status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var vres x402.VerifyResponse
+	_ = json.NewDecoder(rr.Body).Decode(&vres)
+	if !vres.IsValid {
+		t.Fatalf("/verify invalid: %s", *vres.InvalidReason)
+	}
+
+	// 2) /settle should send a real tx (gas payer pays)
+	settleBody, _ := json.Marshal(x402.SettleRequest{
+		X402Version:         1,
+		PaymentHeader:       base64.StdEncoding.EncodeToString(hdrBytes),
+		PaymentRequirements: reqs,
+	})
+
+	rr2 := httptest.NewRecorder()
+	r2 := httptest.NewRequest(http.MethodPost, "/settle", bytes.NewReader(settleBody))
+	r2.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(rr2, r2)
+
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("/settle status=%d body=%s", rr2.Code, rr2.Body.String())
+	}
+	var sres x402.SettleResponse
+	_ = json.NewDecoder(rr2.Body).Decode(&sres)
+	if !sres.Success || sres.Transaction == "" {
+		t.Fatalf("/settle failed: %v", *sres.ErrorReason)
+	}
+	t.Logf("settled tx: %s on %s", sres.Transaction, sres.Network)
+}
+
 func TestMaliciousReqHeaders(t *testing.T) {
 	srv, err := newTestServer()
 	if err != nil {
