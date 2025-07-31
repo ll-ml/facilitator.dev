@@ -10,12 +10,14 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"x402/internal/config"
 	"x402/internal/cryptohelpers"
 	"x402/pkg/x402"
 
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -185,11 +187,15 @@ func TestVerifyEndPoint(t *testing.T) {
 }
 
 func TestSettle_ExactEVM_Sepola(t *testing.T) {
-	buyerKey, err := crypto.GenerateKey()
+	buyerKeyBytes, err := os.ReadFile("../../cmd/facilitator-init/keystore/UTC--2025-07-26T18-26-29.885316000Z--642a7ee30c09e2f2467c7b14f44de7e21600fd11")
 	if err != nil {
 		t.Fatal(err)
 	}
-	from := crypto.PubkeyToAddress(buyerKey.PublicKey)
+
+	key, err := keystore.DecryptKey(buyerKeyBytes, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	sellerKey, err := crypto.GenerateKey()
 	if err != nil {
@@ -203,15 +209,14 @@ func TestSettle_ExactEVM_Sepola(t *testing.T) {
 	}
 
 	auth := &x402.ExactEvmPayloadAuthorization{
-		From:        from.Hex(),
+		From:        "0x642a7Ee30C09E2f2467c7B14f44De7e21600FD11",
 		To:          to.Hex(),
-		Value:       "0",
+		Value:       "1000000",
 		ValidAfter:  "0",
 		ValidBefore: "4102444800",
-		Nonce:       "0x" + strings.Repeat("ab", 32),
+		Nonce:       "0x" + strings.Repeat("ad", 32),
 	}
 
-	// EIP‑712 domain for **Sepolia USDC**
 	dom := cryptohelpers.EIP3009Domain{
 		Name:    "USDC",
 		Version: "2",
@@ -219,7 +224,7 @@ func TestSettle_ExactEVM_Sepola(t *testing.T) {
 		Token:   common.HexToAddress(srv.cfg.USDCAddress),
 	}
 
-	sig, err := SignEIP3009Authorization(buyerKey, dom, auth)
+	sig, err := SignEIP3009Authorization(key.PrivateKey, dom, auth)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,25 +239,22 @@ func TestSettle_ExactEVM_Sepola(t *testing.T) {
 		},
 	}
 
-	// Optional local sanity check
 	if ok, _, err := VerifyEIP3009Sig(dom, *pay.Payload); !ok {
 		t.Fatalf("local verify failed: %v", err)
 	}
 
-	// Build PaymentRequirements (must match payload)
 	reqs := x402.PaymentRequirements{
 		Scheme:            "exact",
 		Network:           "ethereum",
 		PayTo:             auth.To,
-		MaxAmountRequired: auth.Value,          // "0"
-		Asset:             srv.cfg.USDCAddress, // Sepolia USDC addr
+		MaxAmountRequired: auth.Value, // "1"
+		Asset:             srv.cfg.USDCAddress,
 		Resource:          "test://settle",
 		Description:       "e2e settle test",
 		MimeType:          "application/json",
 		MaxTimeoutSeconds: 600,
 	}
 
-	// 1) /verify (eth_call) should pass
 	hdrBytes, _ := json.Marshal(pay)
 	verifyBody, _ := json.Marshal(x402.VerifyRequest{
 		X402Version:         1,
@@ -273,7 +275,6 @@ func TestSettle_ExactEVM_Sepola(t *testing.T) {
 		t.Fatalf("/verify invalid: %s", *vres.InvalidReason)
 	}
 
-	// 2) /settle should send a real tx (gas payer pays)
 	settleBody, _ := json.Marshal(x402.SettleRequest{
 		X402Version:         1,
 		PaymentHeader:       base64.StdEncoding.EncodeToString(hdrBytes),
