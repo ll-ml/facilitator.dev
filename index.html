@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <link rel="icon" href="/favicon_32x32.ico" sizes="32x32">
+    <link rel="icon" href="/favicon_16x16.ico" sizes="16x16">
+    <link rel="icon" href="/favicon_64x64.ico" sizes="64x64">
+
+    <link rel="icon" type="image/png" href="/favicon_16x16.png" sizes="16x16">
+    <link rel="icon" type="image/png" href="/favicon_32x32.png" sizes="32x32">
+    <link rel="icon" type="image/png" href="/favicon_64x64.png" sizes="64x64">
+
+    <link rel="apple-touch-icon" href="/favicon_preview.png">
+    <title>facilitator.dev — The open-source payment facilitator</title>
+    <meta
+      name="description"
+      content="facilitator.dev is a GPL-3, open, HTTP-native payment facilitator. Verify and settle on-chain payments without running blockchain infra — great for humans and agents."
+    />
+    <script type="module" crossorigin src="/assets/index-DhEJbXkk.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BwXFEuWR.css">
+  </head>
+  <body>
+    <canvas id="bg-canvas" aria-hidden="true"></canvas>
+    <div class="vignette" aria-hidden="true"></div>
+
+    <header>
+      <div class="brand">
+        <span class="dot" aria-hidden="true"></span> facilitator.dev
+      </div>
+      <nav>
+        <a href="#why">Why</a>
+        <a href="#what">What it does</a>
+        <a href="#trust">Trust & license</a>
+        <a href="#try">Try it</a>
+
+        <label class="switch small-hide" title="Toggle transaction notifications">
+          <input type="checkbox" id="txToggle" checked />
+          <span class="slider" aria-hidden="true"></span>
+          <span class="switch-label">TX feed</span>
+        </label>
+      </nav>
+    </header>
+
+    <div class="tx-feed" id="tx-feed" aria-live="polite" aria-atomic="false"></div>
+
+    <main class="hero" id="top">
+      <span class="tag"><span class="pulse"></span> Developer-first • HTTP-native • Non-custodial</span>
+      <h1>Payment infrastructure for the autonomous economy.</h1>
+      <p class="subtitle">
+        Payments should feel like the rest of the internet: low-friction, programmatic, and safe for humans and autonomous agents.
+        <strong>facilitator.dev</strong> verifies payment payloads and settles on-chain—so your API can stay focused on serving resources.
+      </p>
+      <a class="cta" href="#why">Why teams use a facilitator →</a>
+
+      <div
+        class="hint"
+        onclick="document.querySelector('#why').scrollIntoView({behavior:'smooth'})"
+        role="button"
+        tabindex="0"
+      >
+        Scroll for details <span class="chev"></span>
+      </div>
+    </main>
+
+    <section id="why">
+      <div class="container">
+        <h2>Why use a facilitator?</h2>
+        <div class="grid" style="margin-top:18px">
+          <div class="card">
+            <h3>Cut operational drag</h3>
+            <p class="muted">
+              No direct node management or custom verification code. Offload payment verification and settlement to a single, auditable service.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Consistency across services</h3>
+            <p class="muted">
+              Standardized verification/settlement flows keep behavior uniform across endpoints and teams.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Faster integration</h3>
+            <p class="muted">
+              Start accepting payments without rebuilding blockchain plumbing. Keep your app HTTP-native.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Non-custodial by design</h3>
+            <p class="muted">
+              The facilitator never takes control of funds. It validates signed client intent and executes accordingly.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Agent-ready</h3>
+            <p class="muted">
+              Safe for autonomous agents with clear limits and auditable actions—great for machine-to-machine APIs.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Optional, not required</h3>
+            <p class="muted">
+              You can verify and settle locally. Using a facilitator just accelerates adoption and reduces mistakes.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="what">
+      <div class="container">
+        <h2>What a facilitator does</h2>
+        <div class="grid" style="margin-top:18px">
+          <div class="card" style="grid-column: span 6">
+            <h3>Verify payments</h3>
+            <p class="muted">
+              Checks that a client’s payment payload matches the server’s declared requirements and is correctly signed.
+            </p>
+          </div>
+          <div class="card" style="grid-column: span 6">
+            <h3>Settle on-chain</h3>
+            <p class="muted">
+              Submits validated payments to the blockchain on behalf of the server and monitors confirmations.
+            </p>
+          </div>
+          <div class="card" style="grid-column: span 6">
+            <h3>Return results</h3>
+            <p class="muted">
+              Provides verification and settlement responses so the server can decide whether to fulfill the request.
+            </p>
+          </div>
+          <div class="card" style="grid-column: span 6">
+            <h3>No custody, no lock-in</h3>
+            <p class="muted">
+              Executes based on client-signed payloads; does not hold funds. Self-host or swap implementations without breaking contracts.
+            </p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:24px">
+          <h3>Where it fits</h3>
+          <p class="muted" style="margin:0 0 12px 0">
+            Clients request resources over HTTP. If payment is required, your resource server can ask for it and delegate
+            <em>verification</em> and <em>settlement</em> to the facilitator. Once confirmed, serve the resource and include
+            transaction details in your response headers.
+          </p>
+
+          <div class="muted" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:center; margin-top:6px">
+            <span class="pill">Client</span>
+            <span>→</span>
+            <span class="pill">Resource Server</span>
+            <span>→</span>
+            <span class="pill">Facilitator</span>
+            <span>→</span>
+            <span class="pill">Chain</span>
+            <span>→</span>
+            <span class="pill">Resource Server</span>
+            <span>→</span>
+            <span class="pill">Client</span>
+          </div>
+
+          <div class="muted" style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:center; margin-top:18px">
+            <a class="btn" href="https://github.com/ll-ml/facilitator.dev" target="_blank" rel="noopener">
+              View source on GitHub
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="trust">
+      <div class="container">
+        <h2>Trust, auditability & license</h2>
+        <div class="grid" style="margin-top:18px">
+          <div class="card" style="grid-column: span 6">
+            <h3>Free & open source</h3>
+            <p class="muted">
+              <strong>GPL-3.0 licensed</strong>, publicly auditable code. Embraces openness and ensures implementers remain in charge.
+            </p>
+          </div>
+          <div class="card" style="grid-column: span 6">
+            <h3>Deploy your way</h3>
+            <p class="muted">
+              Run it yourself or use a hosted instance. Either way, the facilitator remains a trust-minimizing component that only acts per client intent.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="try" aria-labelledby="try-title">
+      <div class="container">
+        <h2 id="try-title">Give it a try — live demo</h2>
+        <div class="try-wrap">
+          <div class="try-copy">
+            <p class="muted" style="margin-top:8px">
+              Test the flow with a tiny transfer. This demo is set to
+              <span class="pill"><strong>1 USDC</strong> on <strong>Ethereum</strong></span>.
+            </p>
+            <ul class="muted small" style="margin-top:14px; line-height:1.6">
+              <!--TODO add tips later-->
+            </ul>
+          </div>
+
+          <div class="form-card">
+            <form id="demo-form" novalidate>
+              <div style="display:grid; gap:14px">
+                <div>
+                  <label class="label" for="to">Recipient (Ethereum address)</label>
+                  <input
+                    class="input"
+                    id="to"
+                    name="to"
+                    placeholder="0xA0Cf…"
+                    required
+                    pattern="^0x[a-fA-F0-9]{40}$"
+                    title="Enter a valid 42-character Ethereum address (0x…)"
+                  />
+                </div>
+
+                <div class="row">
+                  <div>
+                    <label class="label" for="amount">Amount</label>
+                    <input class="input" id="amount" name="amount" value="1" readonly />
+                  </div>
+                  <div>
+                    <label class="label" for="asset">Asset</label>
+                    <input class="input" id="asset" name="asset" value="USDC" readonly />
+                  </div>
+                  <div>
+                    <label class="label" for="network">Network</label>
+                    <input class="input" id="network" name="network" value="Ethereum" readonly />
+                  </div>
+                </div>
+
+                <div>
+                  <label class="label" for="memo">Memo (optional)</label>
+                  <input class="input" id="memo" name="memo" placeholder="Thanks for the demo!" />
+                </div>
+
+                <div class="row" style="align-items:center">
+                  <label class="small" style="display:flex; align-items:center; gap:8px">
+                    <input type="checkbox" id="consent" required />
+                    I understand this is a live demo sending <strong>1 USDC</strong> on Ethereum.
+                  </label>
+                  <span class="pill small" title="This demo can also be executed by authorized agents">
+                    <span
+                      class="dot"
+                      style="width:8px;height:8px;border-radius:50%;background:var(--brand)"
+                    ></span>
+                    Agent-capable
+                  </span>
+                </div>
+
+                <button type="submit" class="btn" id="sendBtn">
+                  <span id="btnIcon" class="spinner" style="display:none"></span>
+                  <span id="btnText">Send 1 USDC on Ethereum</span>
+                </button>
+
+                <div id="formStatus" aria-live="polite"></div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="foot">
+      © <span id="year"></span> facilitator.dev. All rights reserved.
+    </div>
+
+    <!-- App -->
+  </body>
+</html>
+
