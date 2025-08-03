@@ -18,7 +18,7 @@ func main() {
 	}
 
 	fmt.Print("Enter new keystore password: ")
-	pw, err := term.ReadPassword(int(os.Stderr.Fd()))
+	pw, err := term.ReadPassword(int(os.Stdin.Fd()))
 	if err != nil {
 		panic(err)
 	}
