@@ -10,8 +10,8 @@ import (
 
 type Config struct {
 	HTTPAddr      string
-	RPCURL        string // fully assembled URL with key
-	USDCAddress   string // hex
+	RPCURL        string // will be fully assembled URL with key
+	USDCAddress   string // addr of usdc on whatever network your using
 	VerifyTimeout time.Duration
 	SettleTimeout time.Duration
 

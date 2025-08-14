@@ -1,2 +1,2 @@
 # facilitator.dev
-Payment infrastructure for the autonomous economy.
+Secure payments over HTTP.
