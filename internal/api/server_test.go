@@ -187,12 +187,12 @@ func TestVerifyEndPoint(t *testing.T) {
 }
 
 func TestSettle_ExactEVM_Sepola(t *testing.T) {
-	buyerKeyBytes, err := os.ReadFile("../../cmd/facilitator-init/keystore/UTC--2025-07-26T18-26-29.885316000Z--642a7ee30c09e2f2467c7b14f44de7e21600fd11")
+	buyerKeyBytes, err := os.ReadFile("../../cmd/facilitator-init/keystore/UTC--2025-08-03T16-22-02.415654000Z--ae50c2de5561e46e17e253ee0cb60c2390cae7d3")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	key, err := keystore.DecryptKey(buyerKeyBytes, "test")
+	key, err := keystore.DecryptKey(buyerKeyBytes, "testing")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,12 +209,12 @@ func TestSettle_ExactEVM_Sepola(t *testing.T) {
 	}
 
 	auth := &x402.ExactEvmPayloadAuthorization{
-		From:        "0x642a7Ee30C09E2f2467c7B14f44De7e21600FD11",
+		From:        "0xae50c2de5561e46e17e253ee0cb60c2390cae7d3",
 		To:          to.Hex(),
 		Value:       "1000000",
 		ValidAfter:  "0",
 		ValidBefore: "4102444800",
-		Nonce:       "0x" + strings.Repeat("ad", 32),
+		Nonce:       "0x" + strings.Repeat("0F", 32),
 	}
 
 	dom := cryptohelpers.EIP3009Domain{
